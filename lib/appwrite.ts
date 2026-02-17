@@ -58,36 +58,26 @@ function docToOutage(doc: any): OutageData {
 }
 
 export async function registerUser(phone: string, password: string, displayName?: string): Promise<UserProfile> {
-  const email = phoneToEmail(phone);
-
-  const existing = await databases.listDocuments(DB_ID, USERS_COLLECTION, [
-    Query.equal('phone', phone),
-    Query.limit(1),
-  ]);
-  if (existing.documents.length > 0) {
-    throw new Error('Ce numéro est déjà utilisé');
+  const { getApiUrl } = require('@/lib/query-client');
+  const baseUrl = getApiUrl();
+  const res = await globalThis.fetch(`${baseUrl}api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, password, displayName }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Erreur lors de l'inscription");
   }
 
-  const authUser = await account.create(ID.unique(), email, password, displayName || phone);
-
+  const email = phoneToEmail(phone);
   await account.createEmailPasswordSession(email, password);
 
-  const profileDoc = await databases.createDocument(DB_ID, USERS_COLLECTION, authUser.$id, {
-    phone,
-    displayName: displayName || '',
-    createdAt: new Date().toISOString(),
-    isAdmin: false,
-  }, [
-    Permission.read(Role.users()),
-    Permission.update(Role.users()),
-    Permission.delete(Role.users()),
-  ]);
-
   return {
-    id: authUser.$id,
-    phone,
-    displayName: displayName || '',
-    isAdmin: false,
+    id: data.id,
+    phone: data.phone,
+    displayName: data.displayName || '',
+    isAdmin: data.isAdmin ?? false,
   };
 }
 
@@ -98,29 +88,55 @@ export async function loginUser(phone: string, password: string): Promise<UserPr
     await account.deleteSession('current');
   } catch {}
 
-  await account.createEmailPasswordSession(email, password);
+  let sessionCreated = false;
+  try {
+    await account.createEmailPasswordSession(email, password);
+    sessionCreated = true;
+  } catch (e: any) {
+    if (e?.code === 401 || e?.type === 'user_invalid_credentials') {
+      throw new Error('Numéro ou mot de passe incorrect');
+    }
+  }
 
-  const profile = await databases.listDocuments(DB_ID, USERS_COLLECTION, [
-    Query.equal('phone', phone),
-    Query.limit(1),
-  ]);
-
-  if (profile.documents.length > 0) {
-    const doc = profile.documents[0];
+  if (sessionCreated) {
+    const profile = await databases.listDocuments(DB_ID, USERS_COLLECTION, [
+      Query.equal('phone', phone),
+      Query.limit(1),
+    ]);
+    if (profile.documents.length > 0) {
+      const doc = profile.documents[0];
+      return {
+        id: doc.$id,
+        phone: doc.phone,
+        displayName: doc.displayName || '',
+        isAdmin: doc.isAdmin ?? false,
+      };
+    }
+    const authUser = await account.get();
     return {
-      id: doc.$id,
-      phone: doc.phone,
-      displayName: doc.displayName || '',
-      isAdmin: doc.isAdmin ?? false,
+      id: authUser.$id,
+      phone,
+      displayName: authUser.name || '',
+      isAdmin: false,
     };
   }
 
-  const authUser = await account.get();
+  const { getApiUrl } = require('@/lib/query-client');
+  const baseUrl = getApiUrl();
+  const res = await globalThis.fetch(`${baseUrl}api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Numéro ou mot de passe incorrect');
+  }
   return {
-    id: authUser.$id,
-    phone,
-    displayName: authUser.name || '',
-    isAdmin: false,
+    id: data.id,
+    phone: data.phone,
+    displayName: data.displayName || '',
+    isAdmin: data.isAdmin ?? false,
   };
 }
 
@@ -133,8 +149,9 @@ export async function logoutUser(): Promise<void> {
 export async function getCurrentSession(): Promise<UserProfile | null> {
   try {
     const authUser = await account.get();
+    const phone = authUser.email.replace('@coupurealert.app', '');
     const profile = await databases.listDocuments(DB_ID, USERS_COLLECTION, [
-      Query.equal('phone', authUser.email.replace('@coupurealert.app', '')),
+      Query.equal('phone', phone),
       Query.limit(1),
     ]);
     if (profile.documents.length > 0) {
@@ -148,7 +165,7 @@ export async function getCurrentSession(): Promise<UserProfile | null> {
     }
     return {
       id: authUser.$id,
-      phone: authUser.email.replace('@coupurealert.app', ''),
+      phone,
       displayName: authUser.name || '',
       isAdmin: false,
     };

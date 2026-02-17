@@ -39,9 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadUser = async () => {
     try {
       const data = await AsyncStorage.getItem(AUTH_KEY);
+      let cachedUser: User | null = null;
       if (data) {
-        const parsed = JSON.parse(data);
-        setUser(parsed);
+        cachedUser = JSON.parse(data);
+        setUser(cachedUser);
       }
 
       const session = await getCurrentSession();
@@ -54,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         setUser(u);
         await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(u));
-      } else {
+      } else if (!cachedUser) {
         setUser(null);
         await AsyncStorage.removeItem(AUTH_KEY);
       }

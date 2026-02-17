@@ -1,5 +1,4 @@
-import { Client, Databases, ID, Query } from 'node-appwrite';
-import bcrypt from 'bcryptjs';
+import { Client, Databases, ID, Query, Users } from 'node-appwrite';
 
 const DB_ID = '6994aa87003b4207080f';
 const COLLECTION_ID = 'outages';
@@ -12,6 +11,7 @@ client
   .setKey(process.env.APPWRITE_API_KEY!);
 
 const databases = new Databases(client);
+const usersApi = new Users(client);
 
 export interface OutageDoc {
   $id: string;
@@ -214,18 +214,33 @@ export async function registerUser(phone: string, password: string, displayName?
     throw { code: 409, message: 'Ce numéro est déjà utilisé' };
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
-  const doc = await databases.createDocument(DB_ID, USERS_COLLECTION, ID.unique(), {
+  const email = `${phone}@coupurealert.app`;
+  const authUser = await usersApi.create(ID.unique(), email, undefined, password, displayName || phone);
+  await usersApi.updateEmailVerification(authUser.$id, true);
+
+  const doc = await databases.createDocument(DB_ID, USERS_COLLECTION, authUser.$id, {
     phone,
-    passwordHash,
     displayName: displayName || '',
     createdAt: new Date().toISOString(),
+    isAdmin: false,
   });
 
   return { id: doc.$id, phone: doc.phone, displayName: doc.displayName || '', isAdmin: false };
 }
 
 export async function loginUser(phone: string, password: string) {
+  const email = `${phone}@coupurealert.app`;
+
+  try {
+    const userList = await usersApi.list([Query.equal('email', email), Query.limit(1)]);
+    if (userList.total === 0) {
+      throw { code: 401, message: 'Numéro ou mot de passe incorrect' };
+    }
+  } catch (e: any) {
+    if (e?.code === 401) throw e;
+    throw { code: 401, message: 'Numéro ou mot de passe incorrect' };
+  }
+
   const result = await databases.listDocuments(DB_ID, USERS_COLLECTION, [
     Query.equal('phone', phone),
     Query.limit(1),
@@ -236,11 +251,6 @@ export async function loginUser(phone: string, password: string) {
   }
 
   const user = result.documents[0];
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    throw { code: 401, message: 'Numéro ou mot de passe incorrect' };
-  }
-
   return { id: user.$id, phone: user.phone, displayName: user.displayName || '', isAdmin: user.isAdmin ?? false };
 }
 

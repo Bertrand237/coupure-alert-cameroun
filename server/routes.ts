@@ -27,8 +27,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!phone || !password) {
         return res.status(400).json({ error: "Numéro et mot de passe requis" });
       }
-      if (password.length < 4) {
-        return res.status(400).json({ error: "Le mot de passe doit contenir au moins 4 caractères" });
+      if (password.length < 8) {
+        return res.status(400).json({ error: "Le mot de passe doit contenir au moins 8 caractères" });
       }
       const user = await registerUser(phone, password, displayName);
       res.status(201).json(user);

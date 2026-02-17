@@ -25,7 +25,7 @@ export default function AuthScreen() {
       setError(t.phoneNumber + ' & ' + t.password + ' requis');
       return;
     }
-    if (password.length < 4) {
+    if (password.length < 8) {
       setError(t.passwordHint);
       return;
     }
