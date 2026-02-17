@@ -1,0 +1,119 @@
+Crée une application Android complète en Java nommée "Coupure Alert Cameroun" permettant aux utilisateurs de signaler et de visualiser les coupures d'eau, d'électricité et d'internet partout au Cameroun. L'application doit être bilingue (français/anglais) et fonctionner hors ligne : toutes les actions sont enregistrées localement (base Room) et synchronisées avec Appwrite dès qu'une connexion internet est disponible. Les notifications sont gérées localement (pas de Firebase Cloud Messaging) : l'application vérifie périodiquement les nouvelles coupures et alerte l'utilisateur si une coupure est signalée près de chez lui.
+
+Fonctionnalités détaillées :
+
+Menu principal : écran avec des cartes (CardView) pour accéder aux modules :
+
+Signaler une coupure
+
+Voir la carte
+
+Historique
+
+Statistiques
+
+Confirmer une coupure
+
+Générer un rapport PDF
+
+Signalement de coupure :
+
+À l'ouverture, demande la permission GPS. Si accordée, obtient automatiquement la position, utilise le géocodage inverse (Geocoder) pour afficher le quartier, ville, région.
+
+Trois gros boutons colorés : Eau (bleu), Électricité (jaune), Internet (rouge).
+
+Option d'ajouter une photo (appareil photo ou galerie). La photo est stockée localement et son chemin est enregistré.
+
+Si hors ligne : sauvegarde dans Room avec synced = false et message informant que l'envoi sera fait plus tard.
+
+Si en ligne : envoi immédiat à Appwrite (collection coupures) et upload de la photo (bucket photos).
+
+Carte interactive (Google Maps) :
+
+Affiche tous les signalements avec des marqueurs colorés par type.
+
+Chargement des données depuis Appwrite + fusion avec les données locales non synchronisées.
+
+Centrage sur la position de l'utilisateur.
+
+Info-bulle au clic : quartier, date, nombre de confirmations.
+
+Confirmation collective :
+
+Liste des coupures récentes (< 24h) dans un rayon de 20 km autour de l'utilisateur (calcul de distance).
+
+Chaque élément : type, lieu, nombre de confirmations, bouton "Confirmer".
+
+Confirmer incrémente le compteur (localement d'abord, synchronisé ensuite). Limite à une confirmation par jour par utilisateur (optionnel).
+
+Historique :
+
+Liste chronologique de toutes les coupures avec filtres (par région : Adamaoua, Centre, Est, Extrême-Nord, Littoral, Nord, Nord-Ouest, Ouest, Sud, Sud-Ouest ; par type).
+
+Chaque élément : type, quartier/ville, date, confirmations, icône photo.
+
+Détail au clic : affiche la photo (si présente) et bouton de partage.
+
+Statistiques (MPAndroidChart) :
+
+Camembert : répartition des coupures par type.
+
+Histogramme : nombre de coupures par région.
+
+Boutons pour choisir la période (semaine, mois, tout).
+
+Rapports PDF (iText7) :
+
+Génération d'un PDF contenant les statistiques (graphiques et tableaux) pour une région/période choisie.
+
+Partage du PDF via Intent (email, WhatsApp, etc.).
+
+Partage :
+
+Dans l'écran de détail d'une coupure, bouton "Partager" qui envoie un texte (type, lieu, date) via les applications disponibles.
+
+Notifications locales :
+
+Un WorkManager périodique (ex. toutes les heures) vérifie les nouvelles coupures (comparaison avec la dernière vérification) dans la région de l'utilisateur (basée sur sa position ou région préférée).
+
+Si nouvelle coupure détectée, affiche une notification (NotificationManager) avec titre, contenu, et action d'ouvrir l'application.
+
+Mode hors ligne et synchronisation :
+
+Base Room : table coupures avec champs : id, type, latitude, longitude, quartier, ville, region, date, confirmations, photoPath (local), photoId (distant), synced (boolean), estRetablie, dateRetablissement.
+
+WorkManager périodique (toutes les 15 min) et déclenché par reconnexion réseau :
+
+Envoie vers Appwrite les enregistrements avec synced = false.
+
+Récupère les nouvelles coupures depuis Appwrite et les insère en local.
+
+Gère les mises à jour (ex. confirmations).
+
+Bilinguisme :
+
+Tous les textes externalisés dans res/values/strings.xml (français) et res/values-en/strings.xml (anglais).
+
+Détection automatique de la langue du système.
+
+Permissions :
+
+ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, CAMERA, WRITE_EXTERNAL_STORAGE, INTERNET, ACCESS_NETWORK_STATE.
+
+Backend Appwrite (à configurer par l'utilisateur) :
+
+Collection coupures avec attributs : type (string enum), latitude (double), longitude (double), quartier (string), ville (string), region (string), date (datetime), confirmations (int), photoId (string), commentaire (string), estRetablie (boolean), dateRetablissement (datetime).
+
+Bucket photos pour les images.
+
+Placeholders dans le code pour endpoint, project ID, database ID, collection ID, bucket ID.
+
+Contraintes techniques :
+
+Langage Java, SDK min API 24.
+
+Code bien structuré, commenté, robuste (gestion d'erreurs).
+
+Tous les fichiers nécessaires (Java, XML, ressources, Gradle, manifest) doivent être fournis avec des placeholders pour les clés API (Google Maps, Appwrite) que l'utilisateur remplacera.
+
+Le projet doit être prêt à être compilé après remplacement des placeholders.
