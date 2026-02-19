@@ -326,3 +326,141 @@ export async function setUserAdminStatus(id: string, isAdmin: boolean): Promise<
     isAdmin: doc.isAdmin ?? false,
   };
 }
+
+const INCIDENTS_COLLECTION = 'incidents';
+
+export interface IncidentData {
+  id: string;
+  incidentType: string;
+  latitude: number;
+  longitude: number;
+  quartier: string;
+  ville: string;
+  region: string;
+  confirmations: number;
+  photoUri: string | null;
+  commentaire: string;
+  estResolue: boolean;
+  dateResolution: string | null;
+  createdAt: string;
+  userId?: string;
+}
+
+function docToIncident(doc: any): IncidentData {
+  return {
+    id: doc.$id,
+    incidentType: doc.incidentType,
+    latitude: doc.latitude,
+    longitude: doc.longitude,
+    quartier: doc.quartier || 'N/A',
+    ville: doc.ville || 'N/A',
+    region: doc.region || 'N/A',
+    confirmations: doc.confirmations ?? 1,
+    photoUri: doc.photoUri || null,
+    commentaire: doc.commentaire || '',
+    estResolue: doc.estResolue ?? false,
+    dateResolution: doc.dateResolution || null,
+    createdAt: doc.createdAt || doc.$createdAt,
+    userId: doc.userId || '',
+  };
+}
+
+export async function listIncidents(filters?: { type?: string; region?: string; hours?: string }): Promise<IncidentData[]> {
+  const queries: string[] = [Query.orderDesc('createdAt'), Query.limit(200)];
+
+  if (filters?.type) queries.push(Query.equal('incidentType', filters.type));
+  if (filters?.region) queries.push(Query.equal('region', filters.region));
+  if (filters?.hours) {
+    const cutoff = new Date(Date.now() - parseInt(filters.hours) * 3600000).toISOString();
+    queries.push(Query.greaterThan('createdAt', cutoff));
+  }
+
+  const result = await databases.listDocuments(DB_ID, INCIDENTS_COLLECTION, queries);
+  return result.documents.map(docToIncident);
+}
+
+export async function createIncident(data: {
+  incidentType: string;
+  latitude: number;
+  longitude: number;
+  quartier?: string;
+  ville?: string;
+  region?: string;
+  photoUri?: string | null;
+  commentaire?: string;
+  userId?: string;
+}): Promise<IncidentData> {
+  const doc = await databases.createDocument(DB_ID, INCIDENTS_COLLECTION, ID.unique(), {
+    incidentType: data.incidentType,
+    latitude: data.latitude,
+    longitude: data.longitude,
+    quartier: data.quartier || 'N/A',
+    ville: data.ville || 'N/A',
+    region: data.region || 'N/A',
+    confirmations: 1,
+    photoUri: data.photoUri || null,
+    commentaire: data.commentaire || '',
+    estResolue: false,
+    dateResolution: null,
+    createdAt: new Date().toISOString(),
+    userId: data.userId || '',
+  }, [
+    Permission.read(Role.users()),
+    Permission.update(Role.users()),
+    Permission.delete(Role.users()),
+  ]);
+  return docToIncident(doc);
+}
+
+export async function confirmIncidentDoc(id: string): Promise<IncidentData> {
+  const doc = await databases.getDocument(DB_ID, INCIDENTS_COLLECTION, id);
+  const updated = await databases.updateDocument(DB_ID, INCIDENTS_COLLECTION, id, {
+    confirmations: (doc.confirmations ?? 1) + 1,
+  });
+  return docToIncident(updated);
+}
+
+export async function resolveIncidentDoc(id: string): Promise<IncidentData> {
+  const updated = await databases.updateDocument(DB_ID, INCIDENTS_COLLECTION, id, {
+    estResolue: true,
+    dateResolution: new Date().toISOString(),
+  });
+  return docToIncident(updated);
+}
+
+export async function deleteIncidentDoc(id: string): Promise<void> {
+  await databases.deleteDocument(DB_ID, INCIDENTS_COLLECTION, id);
+}
+
+export async function getIncidentStats() {
+  const allDocs: any[] = [];
+  let offset = 0;
+  const batchSize = 100;
+
+  while (true) {
+    const result = await databases.listDocuments(DB_ID, INCIDENTS_COLLECTION, [
+      Query.limit(batchSize),
+      Query.offset(offset),
+    ]);
+    allDocs.push(...result.documents);
+    if (result.documents.length < batchSize) break;
+    offset += batchSize;
+  }
+
+  const total = allDocs.length;
+  const active = allDocs.filter(o => !o.estResolue).length;
+  const resolved = allDocs.filter(o => o.estResolue).length;
+  const byType = {
+    broken_pipe: allDocs.filter(o => o.incidentType === 'broken_pipe').length,
+    fallen_pole: allDocs.filter(o => o.incidentType === 'fallen_pole').length,
+    cable_on_ground: allDocs.filter(o => o.incidentType === 'cable_on_ground').length,
+    other: allDocs.filter(o => o.incidentType === 'other').length,
+  };
+  const byRegion: Record<string, number> = {};
+  allDocs.forEach(o => {
+    const r = o.region || 'N/A';
+    byRegion[r] = (byRegion[r] || 0) + 1;
+  });
+
+  return { total, active, resolved, byType, byRegion, incidents: allDocs.map(docToIncident) };
+}

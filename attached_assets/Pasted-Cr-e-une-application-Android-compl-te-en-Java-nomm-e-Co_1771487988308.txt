@@ -1,0 +1,37 @@
+Crée une application Android complète en Java nommée "Coupure Alert Cameroun" permettant de signaler et visualiser les coupures d'eau, d'électricité et d'internet partout au Cameroun. L'application doit fonctionner hors ligne (base Room) et se synchroniser avec Appwrite dès qu'une connexion internet est disponible. Elle doit être bilingue français/anglais (tous les textes externalisés). Inclure les fonctionnalités suivantes :
+
+Menu principal avec cartes : Signaler une coupure, Carte, Historique, Statistiques, Confirmer une coupure, Générer un rapport PDF, Signaler une panne d'infrastructure.
+
+Signalement de coupure : géolocalisation automatique (GPS), géocodage inverse pour afficher quartier/ville/région, trois boutons (eau/électricité/internet), ajout de photo (appareil/galerie). Sauvegarde locale si hors ligne, synchronisation ultérieure.
+
+Signalement de panne d'infrastructure : activité séparée avec options (tuyau cassé, poteau tombé, câble électrique au sol). Géolocalisation auto, photo optionnelle, commentaire. Stockage dans une nouvelle table Room incidents et collection Appwrite incidents.
+
+Carte interactive (Google Maps) : marqueurs de coupures (couleur par type) et marqueurs d'incidents (icônes distinctes). Chargement depuis Appwrite + données locales non synchronisées. Centrage sur l'utilisateur.
+
+Confirmation collective : liste des coupures récentes dans un rayon de 20 km, bouton "Confirmer" pour incrémenter le compteur (local d'abord, synchronisation ensuite). Même chose pour les incidents.
+
+Historique : liste de toutes les coupures et incidents avec filtres par région (les 10 régions du Cameroun) et par type. Affichage des détails, photo, bouton de partage.
+
+Statistiques (MPAndroidChart) : camembert par type, histogramme par région. Inclure les données des incidents.
+
+Rapport PDF (iText7) : générer un rapport des statistiques (coupures + incidents) pour une région/période choisie, partage via intent.
+
+Widget écran d'accueil : afficher les 3 dernières coupures dans la région de l'utilisateur, le nombre de coupures aujourd'hui, et un bouton pour signaler rapidement. Mise à jour périodique via WorkManager.
+
+Rappel de rétablissement : pour chaque coupure signalée par l'utilisateur non marquée comme rétablie, envoyer une notification le lendemain demandant si elle est toujours en cours. La notification contient un bouton "Rétablie". Au clic, mise à jour locale de la coupure avec date de rétablissement et synced=false. Utiliser WorkManager quotidien et BroadcastReceiver.
+
+Astuce du jour : afficher chaque jour une astuce pratique différente sur l'écran principal (ex: fabriquer une lampe de poche, numéros d'urgence). Astuces stockées dans un fichier JSON local avec versions français/anglais. Cycle basé sur le jour de l'année.
+
+Fil d'actualité personnalisé "Mon quartier aujourd'hui" : sur l'écran principal, montrer les événements récents (dernières 24h) dans la région de l'utilisateur : coupures, incidents, confirmations. Inclure les distances si GPS disponible. Utiliser LiveData de Room pour rafraîchissement auto.
+
+Hors ligne et synchronisation : tables Room outages et incidents avec champ synced (booléen). WorkManager périodique (toutes les 15 min) et déclenché par reconnexion : envoi des non synchronisés vers Appwrite, téléchargement des nouvelles données, fusion. Photos sauvegardées localement d'abord, uploadées vers le bucket Appwrite photos, ID distant stocké.
+
+Notifications locales (sans Firebase) : pour les rappels de rétablissement et optionnellement pour les nouveaux événements proches. Utiliser NotificationManager avec canaux.
+
+Bilinguisme : toutes les chaînes dans res/values/strings.xml (français) et res/values-en/strings.xml (anglais). Le JSON des astuces inclut les deux langues.
+
+Permissions : ACCESS_FINE_LOCATION, CAMERA, WRITE_EXTERNAL_STORAGE, INTERNET, ACCESS_NETWORK_STATE, POST_NOTIFICATIONS.
+
+Backend Appwrite : collections outages (type, lat, lon, quartier, ville, region, date, confirmations, photoId, commentaire, estRetablie, dateRetablissement) et incidents (similaire plus type d'incident). Bucket photos. Fournir des placeholders dans AppwriteClient.java pour endpoint, project ID, database ID, IDs de collection, bucket ID.
+
+Fournir tous les fichiers Java, XML layouts, ressources, dépendances Gradle, et AndroidManifest. Le code doit être bien commenté, gérer les erreurs, et prêt pour la production. SDK minimum API 24. L'application doit être exécutable après remplacement des placeholders.

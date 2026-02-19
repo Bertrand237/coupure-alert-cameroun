@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Alert, ActivityIndicator, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -10,10 +10,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
 import Colors from '@/constants/colors';
 import { useI18n } from '@/lib/i18n';
-import { useOutages, OutageType } from '@/lib/outage-store';
-import TypeButton from '@/components/TypeButton';
+import { useIncidents, IncidentType } from '@/lib/incident-store';
 import { router } from 'expo-router';
-import { scheduleRestorationReminder } from '@/lib/notifications';
 
 function normalizeRegion(raw: string): string {
   const normalized = raw
@@ -40,18 +38,26 @@ function normalizeRegion(raw: string): string {
   return regionMap[key] || normalized;
 }
 
-export default function ReportScreen() {
+const incidentTypeConfig: Record<string, { icon: string; iconSet: 'material' | 'ionicons'; color: string; darkColor: string; bgColor: string }> = {
+  broken_pipe: { icon: 'pipe-leak', iconSet: 'material', color: Colors.water, darkColor: Colors.waterDark, bgColor: Colors.waterGlow },
+  fallen_pole: { icon: 'transmission-tower-off', iconSet: 'material', color: Colors.electricity, darkColor: Colors.electricityDark, bgColor: Colors.electricityGlow },
+  cable_on_ground: { icon: 'cable-data', iconSet: 'material', color: Colors.internet, darkColor: Colors.internetDark, bgColor: Colors.internetGlow },
+  other: { icon: 'alert-circle-outline', iconSet: 'ionicons', color: Colors.accent, darkColor: Colors.accentDark, bgColor: 'rgba(255, 87, 34, 0.15)' },
+};
+
+export default function ReportIncidentScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
-  const { addOutage } = useOutages();
+  const { addIncident } = useIncidents();
 
-  const [selectedType, setSelectedType] = useState<OutageType | null>(null);
+  const [selectedType, setSelectedType] = useState<IncidentType | null>(null);
   const [locationStatus, setLocationStatus] = useState<'loading' | 'granted' | 'denied' | 'error'>('loading');
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [quartier, setQuartier] = useState('');
   const [ville, setVille] = useState('');
   const [region, setRegion] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [commentaire, setCommentaire] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -128,8 +134,8 @@ export default function ReportScreen() {
     setSubmitting(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     try {
-      await addOutage({
-        type: selectedType,
+      await addIncident({
+        incidentType: selectedType,
         latitude: coords.latitude,
         longitude: coords.longitude,
         quartier: quartier || 'N/A',
@@ -137,14 +143,11 @@ export default function ReportScreen() {
         region: region || 'N/A',
         date: new Date().toISOString(),
         photoUri,
+        commentaire,
       });
-      scheduleRestorationReminder('', selectedType, quartier || ville || 'N/A', 4).catch(() => {});
       setSubmitted(true);
       setTimeout(() => {
-        setSubmitted(false);
-        setSelectedType(null);
-        setPhotoUri(null);
-        router.push('/(tabs)');
+        router.back();
       }, 2000);
     } catch (e) {
       Alert.alert('Error', String(e));
@@ -152,6 +155,28 @@ export default function ReportScreen() {
       setSubmitting(false);
     }
   };
+
+  const handleSelectType = (type: IncidentType) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSelectedType(type);
+  };
+
+  const renderIncidentIcon = (type: string, selected: boolean) => {
+    const config = incidentTypeConfig[type];
+    const iconColor = selected ? '#FFF' : config.color;
+    const iconSize = 26;
+    if (config.iconSet === 'material') {
+      return <MaterialCommunityIcons name={config.icon as any} size={iconSize} color={iconColor} />;
+    }
+    return <Ionicons name={config.icon as any} size={iconSize} color={iconColor} />;
+  };
+
+  const incidentTypes: { type: IncidentType; label: string }[] = [
+    { type: 'broken_pipe', label: t.brokenPipe },
+    { type: 'fallen_pole', label: t.fallenPole },
+    { type: 'cable_on_ground', label: t.cableOnGround },
+    { type: 'other', label: t.otherIncident },
+  ];
 
   if (submitted) {
     return (
@@ -161,7 +186,7 @@ export default function ReportScreen() {
             <Ionicons name="checkmark" size={52} color="#FFF" />
           </View>
           <Text style={styles.successTitle}>{t.success}</Text>
-          <Text style={styles.successSubtitle}>{t.reportSaved}</Text>
+          <Text style={styles.successSubtitle}>{t.incidentSaved}</Text>
         </Animated.View>
       </View>
     );
@@ -170,7 +195,11 @@ export default function ReportScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={styles.headerBar}>
-        <Text style={styles.headerTitle}>{t.reportOutage}</Text>
+        <Pressable style={styles.closeButton} onPress={() => router.back()}>
+          <Ionicons name="close" size={26} color={Colors.text} />
+        </Pressable>
+        <Text style={styles.headerTitle}>{t.reportIncident}</Text>
+        <View style={styles.closeButton} />
       </View>
 
       <ScrollView
@@ -179,11 +208,35 @@ export default function ReportScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View entering={FadeInDown.delay(100)}>
-          <Text style={styles.sectionLabel}>{t.selectType}</Text>
-          <View style={styles.typeRow}>
-            <TypeButton type="water" label={t.water} selected={selectedType === 'water'} onPress={() => setSelectedType('water')} />
-            <TypeButton type="electricity" label={t.electricity} selected={selectedType === 'electricity'} onPress={() => setSelectedType('electricity')} />
-            <TypeButton type="internet" label={t.internet} selected={selectedType === 'internet'} onPress={() => setSelectedType('internet')} />
+          <Text style={styles.sectionLabel}>{t.incidentType}</Text>
+          <View style={styles.typeGrid}>
+            {incidentTypes.map((item) => {
+              const config = incidentTypeConfig[item.type];
+              const selected = selectedType === item.type;
+              return (
+                <Pressable
+                  key={item.type}
+                  style={({ pressed }) => [
+                    styles.typeButton,
+                    { borderColor: selected ? config.color : Colors.border },
+                    selected && { backgroundColor: config.color },
+                    !selected && { backgroundColor: config.bgColor },
+                    pressed && styles.typeButtonPressed,
+                  ]}
+                  onPress={() => handleSelectType(item.type)}
+                >
+                  <View style={[styles.typeIconCircle, { backgroundColor: selected ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.9)' }]}>
+                    {renderIncidentIcon(item.type, selected)}
+                  </View>
+                  <Text style={[styles.typeLabel, { color: selected ? '#FFF' : config.color }]}>{item.label}</Text>
+                  {selected && (
+                    <View style={styles.typeCheckBadge}>
+                      <Ionicons name="checkmark" size={14} color={config.color} />
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         </Animated.View>
 
@@ -269,9 +322,25 @@ export default function ReportScreen() {
             </Animated.View>
           )}
         </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(400)}>
+          <Text style={styles.sectionLabel}>{t.comment}</Text>
+          <View style={styles.commentCard}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder={t.commentHint}
+              placeholderTextColor={Colors.textTertiary}
+              value={commentaire}
+              onChangeText={setCommentaire}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+        </Animated.View>
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: (Platform.OS === 'web' ? 84 + 16 : 60 + insets.bottom) }]}>
+      <View style={[styles.bottomBar, { paddingBottom: (Platform.OS === 'web' ? 84 + 16 : 20 + insets.bottom) }]}>
         <Pressable
           style={({ pressed }) => [
             styles.submitButton,
@@ -303,15 +372,70 @@ export default function ReportScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   center: { justifyContent: 'center', alignItems: 'center' },
-  headerBar: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
-  headerTitle: { fontSize: 26, fontFamily: 'Nunito_800ExtraBold', color: Colors.text },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 22, fontFamily: 'Nunito_800ExtraBold', color: Colors.text },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 18 },
   sectionLabel: {
     fontSize: 13, fontFamily: 'Nunito_700Bold', color: Colors.textSecondary,
     marginBottom: 10, marginTop: 20, textTransform: 'uppercase', letterSpacing: 1,
   },
-  typeRow: { flexDirection: 'row', gap: 10 },
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  typeButton: {
+    width: '47%' as any,
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: 18,
+    borderWidth: 2,
+    gap: 8,
+    position: 'relative',
+  },
+  typeButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.95 }],
+  },
+  typeIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeLabel: {
+    fontSize: 12,
+    fontFamily: 'Nunito_700Bold',
+    textAlign: 'center',
+  },
+  typeCheckBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   locationCard: {
     backgroundColor: Colors.cardBg, borderRadius: 18, padding: 16,
     shadowColor: Colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 3,
@@ -343,6 +467,17 @@ const styles = StyleSheet.create({
   removePhotoBtn: {
     position: 'absolute', top: 10, right: 10, width: 32, height: 32, borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center',
+  },
+  commentCard: {
+    backgroundColor: Colors.cardBg, borderRadius: 18, padding: 16,
+    shadowColor: Colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 3,
+  },
+  commentInput: {
+    fontSize: 14,
+    fontFamily: 'Nunito_400Regular',
+    color: Colors.text,
+    minHeight: 100,
+    textAlignVertical: 'top',
   },
   bottomBar: {
     paddingHorizontal: 18, paddingTop: 12, backgroundColor: Colors.background,

@@ -1,17 +1,23 @@
 import React, { useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useI18n } from '@/lib/i18n';
 import { Outage, OutageType } from '@/lib/outage-store';
+import { Incident, IncidentType } from '@/lib/incident-store';
 import { formatTimeAgo } from '@/components/OutageCard';
 import FilterChip from '@/components/FilterChip';
 
+type CategoryFilter = 'outages' | 'incidents' | 'all';
+
 interface Props {
   outages: Outage[];
+  incidents: Incident[];
+  category: CategoryFilter;
+  setCategory: (c: CategoryFilter) => void;
   filterType: OutageType | null;
   setFilterType: (t: OutageType | null) => void;
   userLocation: { latitude: number; longitude: number } | null;
@@ -20,15 +26,29 @@ interface Props {
   netCount: number;
 }
 
-const typeIcons: Record<OutageType, { color: string }> = {
-  water: { color: Colors.water },
-  electricity: { color: Colors.electricity },
-  internet: { color: Colors.internet },
+const typeColors: Record<OutageType, string> = {
+  water: Colors.water,
+  electricity: Colors.electricity,
+  internet: Colors.internet,
+};
+
+const incidentTypeColors: Record<IncidentType, string> = {
+  broken_pipe: Colors.water,
+  fallen_pole: Colors.electricity,
+  cable_on_ground: Colors.internet,
+  other: Colors.accent,
+};
+
+const incidentTypeTranslationKeys: Record<IncidentType, string> = {
+  broken_pipe: 'brokenPipe',
+  fallen_pole: 'fallenPole',
+  cable_on_ground: 'cableOnGround',
+  other: 'otherIncident',
 };
 
 export const isNativeMapAvailable = true;
 
-export default function NativeMapScreen({ outages, filterType, setFilterType, userLocation, waterCount, elecCount, netCount }: Props) {
+export default function NativeMapScreen({ outages, incidents, category, setCategory, filterType, setFilterType, userLocation, waterCount, elecCount, netCount }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const mapRef = useRef<MapView>(null);
@@ -40,6 +60,9 @@ export default function NativeMapScreen({ outages, filterType, setFilterType, us
     longitudeDelta: userLocation ? 0.15 : 6,
   };
 
+  const showOutages = category === 'outages' || category === 'all';
+  const showIncidents = category === 'incidents' || category === 'all';
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <MapView
@@ -49,11 +72,11 @@ export default function NativeMapScreen({ outages, filterType, setFilterType, us
         showsUserLocation={true}
         showsMyLocationButton={false}
       >
-        {outages.map(o => (
+        {showOutages && outages.map(o => (
           <Marker
-            key={o.id}
+            key={`outage-${o.id}`}
             coordinate={{ latitude: o.latitude, longitude: o.longitude }}
-            pinColor={typeIcons[o.type].color}
+            pinColor={typeColors[o.type]}
           >
             <Callout onPress={() => router.push({ pathname: '/detail', params: { id: o.id } })}>
               <View style={styles.callout}>
@@ -65,15 +88,38 @@ export default function NativeMapScreen({ outages, filterType, setFilterType, us
             </Callout>
           </Marker>
         ))}
+        {showIncidents && incidents.map(inc => (
+          <Marker
+            key={`incident-${inc.id}`}
+            coordinate={{ latitude: inc.latitude, longitude: inc.longitude }}
+            pinColor={incidentTypeColors[inc.incidentType]}
+          >
+            <Callout onPress={() => router.push({ pathname: '/incident-detail', params: { id: inc.id } })}>
+              <View style={styles.callout}>
+                <Text style={styles.calloutTitle}>{(t as any)[incidentTypeTranslationKeys[inc.incidentType]]}</Text>
+                <Text style={styles.calloutText}>{inc.quartier}, {inc.ville}</Text>
+                <Text style={styles.calloutText}>{formatTimeAgo(inc.date, t)}</Text>
+                <Text style={styles.calloutText}>{inc.confirmations} {t.confirmations}</Text>
+              </View>
+            </Callout>
+          </Marker>
+        ))}
       </MapView>
 
       <View style={[styles.overlay, { top: insets.top + 10 }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          <FilterChip label={t.allTypes} selected={!filterType} onPress={() => setFilterType(null)} color={Colors.primary} />
-          <FilterChip label={`${t.water} (${waterCount})`} selected={filterType === 'water'} onPress={() => setFilterType(filterType === 'water' ? null : 'water')} color={Colors.water} />
-          <FilterChip label={`${t.electricity} (${elecCount})`} selected={filterType === 'electricity'} onPress={() => setFilterType(filterType === 'electricity' ? null : 'electricity')} color={Colors.electricityDark} />
-          <FilterChip label={`${t.internet} (${netCount})`} selected={filterType === 'internet'} onPress={() => setFilterType(filterType === 'internet' ? null : 'internet')} color={Colors.internet} />
+          <FilterChip label={t.allEvents} selected={category === 'all'} onPress={() => setCategory('all')} color={Colors.primary} />
+          <FilterChip label={t.outages} selected={category === 'outages'} onPress={() => setCategory('outages')} color={Colors.accent} />
+          <FilterChip label={t.incidents} selected={category === 'incidents'} onPress={() => setCategory('incidents')} color={Colors.electricityDark} />
         </ScrollView>
+        {(category === 'outages' || category === 'all') && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            <FilterChip label={t.allTypes} selected={!filterType} onPress={() => setFilterType(null)} color={Colors.primary} />
+            <FilterChip label={`${t.water} (${waterCount})`} selected={filterType === 'water'} onPress={() => setFilterType(filterType === 'water' ? null : 'water')} color={Colors.water} />
+            <FilterChip label={`${t.electricity} (${elecCount})`} selected={filterType === 'electricity'} onPress={() => setFilterType(filterType === 'electricity' ? null : 'electricity')} color={Colors.electricityDark} />
+            <FilterChip label={`${t.internet} (${netCount})`} selected={filterType === 'internet'} onPress={() => setFilterType(filterType === 'internet' ? null : 'internet')} color={Colors.internet} />
+          </ScrollView>
+        )}
       </View>
 
       {userLocation && (

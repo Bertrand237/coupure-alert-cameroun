@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { I18nProvider } from "@/lib/i18n";
 import { OutageProvider } from "@/lib/outage-store";
+import { IncidentProvider } from "@/lib/incident-store";
 import { AuthProvider, useAuth } from "@/lib/auth-store";
 import { useFonts, Nunito_400Regular, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold } from "@expo-google-fonts/nunito";
 import { StatusBar } from "expo-status-bar";
@@ -34,13 +35,18 @@ function AppContent() {
 
   return (
     <OutageProvider>
-      <Stack screenOptions={{ headerBackTitle: "Back" }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="detail" options={{ headerShown: false, presentation: 'modal' }} />
-        <Stack.Screen name="settings" options={{ headerShown: false, presentation: 'modal' }} />
-        <Stack.Screen name="admin" options={{ headerShown: false, presentation: 'modal' }} />
-        <Stack.Screen name="auth" options={{ headerShown: false }} />
-      </Stack>
+      <IncidentProvider>
+        <Stack screenOptions={{ headerBackTitle: "Back" }}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="detail" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="settings" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="admin" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="report-incident" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="incident-detail" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="pdf-report" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="auth" options={{ headerShown: false }} />
+        </Stack>
+      </IncidentProvider>
     </OutageProvider>
   );
 }
